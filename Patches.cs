@@ -35,12 +35,10 @@ namespace AutoResumeSurvival
         private static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, UIntPtr dwExtraInfo);
 
         private static AutoResumeMod? _instance;
-
         private static MethodInfo? _il2CppTypeOfGenericMethod;
         private static MethodInfo? _il2CppTryCastGenericMethod;
         private static Il2CppSystem.Type? _gameObjectIl2CppType;
         private static Il2CppSystem.Type? _componentIl2CppType;
-
         private Stage _stage = Stage.WaitingForMainMenu;
         private bool _bypassed;
         private bool _enteredGameplayScene;
@@ -51,6 +49,8 @@ namespace AutoResumeSurvival
         private float _readySinceTime;
         private int _consecutiveReadyFrames;
         private bool _showCancelPrompt;
+        private float _cancelConfirmUntilTime;
+        private bool ShouldDrawCancelConfirmation => _bypassed && Time.realtimeSinceStartup < _cancelConfirmUntilTime;
         private bool ShouldDrawCancelPrompt => !_bypassed && _showCancelPrompt && _stage < Stage.WaitingForGameplayLoad;
         private float _lastReadinessCheckTime;
 
@@ -61,7 +61,7 @@ namespace AutoResumeSurvival
         {
             _instance = this;
             ResetSequence("OnInitializeMelon");
-            LoggerInstance.Msg("AutoResumeSurvival v2.60 initialized. Hold LeftShift or Esc during menus to bypass.");
+            LoggerInstance.Msg("AutoResumeSurvival initialized. Hold LeftShift or Esc during menus to bypass.");
 
             TryHookSceneLoaded();
             TryCreateRunnerObject();
@@ -156,6 +156,7 @@ namespace AutoResumeSurvival
                     {
                         _bypassed = true;
                         _showCancelPrompt = false;
+                        _cancelConfirmUntilTime = Time.realtimeSinceStartup + 4f;
                         _stage = Stage.Done;
                         LoggerInstance.Msg(MelonLoader.Logging.ColorARGB.Yellow, "Auto-resume bypassed by user (LeftShift / Esc).");
                         return;
@@ -666,10 +667,22 @@ namespace AutoResumeSurvival
 
             private void OnGUI()
             {
-                if (_instance == null || !_instance.ShouldDrawCancelPrompt)
+                if (_instance == null)
                     return;
 
-                const string message = "Auto-resuming Survival... press Left Shift or Esc to cancel!";
+                string? message = null;
+
+                if (_instance.ShouldDrawCancelPrompt)
+                {
+                    message = "Auto-resuming Survival... press Left Shift or Esc to cancel!";
+                }
+                else if (_instance.ShouldDrawCancelConfirmation)
+                {
+                    message = "Auto-resume canceled.\nHave a nice day!";
+                }
+
+                if (string.IsNullOrEmpty(message))
+                    return;
 
                 float boxWidth = 800f;
                 float boxHeight = 200f;
