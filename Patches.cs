@@ -1,4 +1,6 @@
-﻿using System;
+﻿#nullable enable
+
+using System;
 using System.Linq;
 using System.Reflection;
 using System.Runtime.InteropServices;
@@ -49,9 +51,11 @@ namespace AutoResumeSurvival
         private float _readySinceTime;
         private int _consecutiveReadyFrames;
         private bool _showCancelPrompt;
+        private bool _showSaveLoadingMessage;
         private float _cancelConfirmUntilTime;
         private bool ShouldDrawCancelConfirmation => _bypassed && Time.realtimeSinceStartup < _cancelConfirmUntilTime;
         private bool ShouldDrawCancelPrompt => !_bypassed && _showCancelPrompt && _stage < Stage.WaitingForGameplayLoad;
+        private bool ShouldDrawSaveLoading => !_bypassed && _showSaveLoadingMessage;
         private float _lastReadinessCheckTime;
 
         private Type? _panelMainMenuType;
@@ -80,6 +84,7 @@ namespace AutoResumeSurvival
             _readySinceTime = 0f;
             _consecutiveReadyFrames = 0;
             _showCancelPrompt = !_bypassed;
+            _showSaveLoadingMessage = false;
             _lastReadinessCheckTime = 0f;
         }
 
@@ -133,6 +138,8 @@ namespace AutoResumeSurvival
                 lower.Contains("lake") || lower.Contains("coastal") || lower.Contains("pleasant"))
             {
                 _enteredGameplayScene = true;
+                if (_stage < Stage.WaitingToPauseGameplay)
+                    _showSaveLoadingMessage = true;
                 SetStage(Stage.WaitingToPauseGameplay, $"Entered gameplay scene '{sceneName}'; waiting for fade-in before pausing...");
             }
         }
@@ -147,7 +154,7 @@ namespace AutoResumeSurvival
             if (_bypassed || _stage == Stage.Done)
                 return;
 
-            // Allow manual bypass until we reach the point where we are waiting to pause gameplay,
+            // Allow manual bypass until we reach the point where we are waiting to pause gameplay.
             if (_stage < Stage.WaitingToPauseGameplay)
             {
                 try
@@ -156,6 +163,7 @@ namespace AutoResumeSurvival
                     {
                         _bypassed = true;
                         _showCancelPrompt = false;
+                        _showSaveLoadingMessage = false;
                         _cancelConfirmUntilTime = Time.realtimeSinceStartup + 4f;
                         _stage = Stage.Done;
                         LoggerInstance.Msg(MelonLoader.Logging.ColorARGB.Yellow, "Auto-resume bypassed by user (LeftShift / Esc).");
@@ -226,11 +234,13 @@ namespace AutoResumeSurvival
                     if (TryClickResumeOnSurvivalMenu())
                     {
                         _showCancelPrompt = false;
+                        _showSaveLoadingMessage = true;
                         SetStage(Stage.WaitingForGameplayLoad, "Activated RESUME on Survival menu; waiting for world load...");
                     }
                     else if (elapsedInStage > 8.0f)
                     {
                         _showCancelPrompt = false;
+                        _showSaveLoadingMessage = false;
                         LoggerInstance.Warning("Timed out looking for RESUME on Survival menu; stopping.");
                         _stage = Stage.Done;
                     }
@@ -245,6 +255,7 @@ namespace AutoResumeSurvival
                     if (elapsedInStage > 30.0f)
                     {
                         _showCancelPrompt = false;
+                        _showSaveLoadingMessage = false;
                         LoggerInstance.Warning("Timed out waiting for gameplay scene load; stopping.");
                         _stage = Stage.Done;
                     }
@@ -254,6 +265,7 @@ namespace AutoResumeSurvival
                     if (elapsedInStage > 45.0f)
                     {
                         _showCancelPrompt = false;
+                        _showSaveLoadingMessage = false;
                         LoggerInstance.Warning("Timed out waiting for gameplay to become ready to pause; stopping.");
                         _stage = Stage.Done;
                         return;
@@ -276,32 +288,7 @@ namespace AutoResumeSurvival
                         // so post-load settle frames finish before pressing Escape.
                         if (now - _readySinceTime >= 1.5f && _consecutiveReadyFrames >= 4)
                         {
-                            SendEscapeKeyPress();
-                            SetStage(Stage.Done, "Gameplay active; sent Escape key to pause.");
-                        }
-                    }
-                    else
-                    {
-                        _consecutiveReadyFrames = 0;
-                        _readySinceTime = 0f;
-
-                        if (now - _lastStatusLogTime >= 2.0f)
-                        {
-                            _lastStatusLogTime = now;
-                            LoggerInstance.Msg("WaitingToPauseGameplay: Save still loading or fading in...");
-                        }
-                    }
-                    break;
-
-                    if (IsGameplayReadyToPause())
-                    {
-                        if (_consecutiveReadyFrames == 0)
-                            _readySinceTime = now;
-
-                        _consecutiveReadyFrames++;
-
-                        if (now - _readySinceTime >= 0.5f && _consecutiveReadyFrames >= 15)
-                        {
+                            _showSaveLoadingMessage = false;
                             SendEscapeKeyPress();
                             SetStage(Stage.Done, "Gameplay active; sent Escape key to pause.");
                         }
@@ -680,6 +667,10 @@ namespace AutoResumeSurvival
                 {
                     message = "Auto-resume canceled.\nHave a nice day!";
                 }
+                else if (_instance.ShouldDrawSaveLoading)
+                {
+                    message = "Too late, save loading!";
+                }
 
                 if (string.IsNullOrEmpty(message))
                     return;
@@ -709,3 +700,5 @@ namespace AutoResumeSurvival
         }
     }
 }
+
+#nullable restore
