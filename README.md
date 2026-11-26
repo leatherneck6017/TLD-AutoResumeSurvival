@@ -1,22 +1,26 @@
 # AutoResumeSurvival
 
-<img width="960" height="540" alt="MissingCraftingIconFix_Cover" src="https://raw.githubusercontent.com/leatherneck6017/TLD-AutoResumeSurvival/refs/heads/master/AutoResumeSurvival-Cover.png" />
+<img width="960" height="540" alt="AutoResumeSurvival-Cover" src="https://raw.githubusercontent.com/leatherneck6017/TLD-AutoResumeSurvival/refs/heads/master/AutoResumeSurvival-Cover.png" />
 
 Does your game take forever to load into your Survival save? Do you wish you could start in a paused state so that you can take a moment to breathe before your character starts to freeze and starve again? Well, AutoResumeSurvival is here to help!
 
-AutoResumeSurvival is a lightweight mod for The Long Dark that automatically navigates from game startup to the Survival mode menu, selects "RESUME", and presses Escape once your save finishes loading so that you start in a paused state.
+AutoResumeSurvival is a lightweight mod for The Long Dark that automatically navigates from game startup to the Survival mode menu, selects "RESUME", and opens the pause menu once your save finishes loading so that you start in a paused state.
 
 ## Features
 
 - Automatic Main Menu to Survival Mode navigation.
 - Automatic selection of RESUME.
-- Dynamic readiness detection that waits for loading panels and screen fade-ins to finish before sending Escape.
+- Dynamic readiness detection that waits for loading panels and screen fade-ins to finish before opening the pause menu.
 - On-screen prompt displaying how to cancel auto-resume while active.
 
 ## Requirements
 
 - The Long Dark (tested on v2.60)
 - MelonLoader v0.7.2
+
+## Recommended
+
+- **BackgroundLoading** keeps the game loading while its window is unfocused. AutoResumeSurvival does not require it, but if that mod is missing and the window is unfocused during startup, a one-time tip is written to the MelonLoader log.
 
 ## Installation
 
@@ -29,7 +33,19 @@ AutoResumeSurvival is a lightweight mod for The Long Dark that automatically nav
 When the game starts, AutoResumeSurvival displays an on-screen prompt indicating that auto-resume is active and how to cancel.
 
 - Let it run to jump straight into your Survival save and pause automatically once the world finishes loading.
-- Press Left Shift or Esc while the message is displayed to cancel auto-resume and take manual control.
+- Press Left Shift or Esc while the first prompt is displayed to cancel auto-resume and take manual control.
+- After RESUME has been triggered, Left Shift or Esc skips only the auto-pause; the save still finishes loading.
+
+## Building from Source
+
+1. Clone or open the project in Visual Studio / .NET SDK targeting `net6.0`.
+2. Update `TLDPath` in `AutoResumeSurvival.csproj` to point to your The Long Dark installation directory (currently set to `E:\SteamLibrary\steamapps\common\TheLongDark`).
+3. Build the project so references from `$(TLDPath)\MelonLoader\net6\*.dll` and `$(TLDPath)\MelonLoader\Il2CppAssemblies\*.dll` resolve.
+4. On a successful build, `BuildActions.targets` copies `AutoResumeSurvival.dll` into your game's `Mods` folder automatically.
+
+## Issues
+
+If you encounter any, please report them on the [GitHub Issues](https://github.com/leatherneck6017/TLD-AutoResumeSurvival/issues) page or contact me directly on the [TLD Modding Discord](https://discord.gg/tldmodding) (@leatherneck6017).
 
 ## AI Disclaimer
 
@@ -37,4 +53,4 @@ AI tools were consulted during the development of this mod as part of my learnin
 
 ## License
 
-This project is open source and available under the [MIT License](LICENSE).
+This project is open source and available under the [MIT License](LICENSE.txt).

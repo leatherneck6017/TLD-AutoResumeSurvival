@@ -32,10 +32,6 @@
 		</Reference>
 	</ItemGroup>
 
-	<ItemGroup>
-		<PackageReference Include="MonsieurMeh.Modding.TLD.Il2CppAssemblies.Windows" Version="2.58.0" />
-	</ItemGroup>
-
 	<Import Project="BuildActions.targets"/>
 
 </Project>
