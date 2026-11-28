@@ -34,10 +34,15 @@ namespace AutoResumeSurvival
         private bool _sawGameplay;
         private float _gameplaySinceTime;
         private bool _loggedBackgroundLoadingTip;
+        // Don't IMGUI-draw the cancel prompt until the main menu panel is actually up.
+        private bool _mainMenuSeen;
+        // Skip drawing on the same frame as OnClickResume() / PauseGame().
+        private bool _skipOnGuiThisFrame;
         private GUIStyle _promptStyle;
 
         private bool ShouldDrawCancelPrompt =>
-            _showCancelPrompt && _stage < Stage.WaitingToPauseGameplay && _stage != Stage.Done;
+            _showCancelPrompt && _mainMenuSeen
+            && _stage < Stage.WaitingToPauseGameplay && _stage != Stage.Done;
 
         private bool ShouldDrawSaveLoading =>
             _showSaveLoadingMessage && _stage == Stage.WaitingToPauseGameplay;
@@ -95,6 +100,17 @@ namespace AutoResumeSurvival
 
         public override void OnGUI()
         {
+            if (_skipOnGuiThisFrame)
+            {
+                _skipOnGuiThisFrame = false;
+                return;
+            }
+
+            // Nothing on screen: don't touch IMGUI (GUI.skin / Box / Label) at all.
+            if (!ShouldDrawCancelPrompt && !ShouldDrawCancelConfirmation
+                && !ShouldDrawNoSaveMessage && !ShouldDrawSaveLoading)
+                return;
+
             string message = null;
 
             if (ShouldDrawCancelPrompt)
@@ -214,6 +230,8 @@ namespace AutoResumeSurvival
                 return;
             }
 
+            _mainMenuSeen = true;
+
             if (menu.ProfileIsLoading())
             {
                 _profileReadySinceTime = 0f;
@@ -292,14 +310,24 @@ namespace AutoResumeSurvival
             }
 
             // Survival screen is open, so its save list should be current now.
-            bool hasSandboxSave = true;
-            try
+            // Refresh on its own frame so it isn't stacked on top of the save load.
+            if (!_sandboxSlotsRefreshed)
             {
-                if (!_sandboxSlotsRefreshed)
+                try
                 {
                     _sandboxSlotsRefreshed = true;
                     SaveGameSlotHelper.RefreshSaveSlots(SaveSlotType.SANDBOX, false);
                 }
+                catch (Exception ex)
+                {
+                    LogStatus(now, $"ClickingResume: RefreshSaveSlots threw ({ex.Message}); trying Resume next frame anyway.");
+                }
+                return;
+            }
+
+            bool hasSandboxSave = true;
+            try
+            {
                 hasSandboxSave = SaveGameSlotHelper.HasSaveSlots(SaveSlotType.SANDBOX)
                     || SaveGameSlotHelper.GetNumSaveSlots(SaveSlotType.SANDBOX) > 0;
             }
@@ -326,6 +354,9 @@ namespace AutoResumeSurvival
 
             try
             {
+                // OnClickResume() starts the save load (GameManager.LoadSaveGameSlot) on this
+                // frame, so don't also spend time in IMGUI here.
+                _skipOnGuiThisFrame = true;
                 sandbox.OnClickResume();
                 _resumeClicked = true;
                 _showCancelPrompt = false;
@@ -404,6 +435,7 @@ namespace AutoResumeSurvival
                     try
                     {
                         _showSaveLoadingMessage = false;
+                        _skipOnGuiThisFrame = true;
                         InputManager.PauseGame();
                         SetStage(Stage.Done, "Gameplay ready; invoked InputManager.PauseGame().");
                     }
