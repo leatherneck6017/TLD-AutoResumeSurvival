@@ -38,6 +38,9 @@ namespace AutoResumeSurvival
         private bool _mainMenuSeen;
         // Skip drawing on the same frame as OnClickResume() / PauseGame().
         private bool _skipOnGuiThisFrame;
+        private float _lastBootAdvanceTime;
+        private float _nextBootSearchTime;
+        private Panel_Boot _cachedBootPanel;
         private GUIStyle _promptStyle;
 
         private bool ShouldDrawCancelPrompt =>
@@ -222,11 +225,185 @@ namespace AutoResumeSurvival
             }
         }
 
+        // Boot intro/disclaimer screens wait for a key and never time out.
+        // Secondary screens use OnNextDisclaimerScreen(); the main disclaimer must not,
+        // because that method indexes m_DisclaimerScreenList and throws once the list is done.
+        private bool TryAdvanceBootIntros(float now)
+        {
+            Panel_Boot boot = GetEnabledBootPanel(now);
+            if (boot == null || IsActive(boot.m_ErrorFlow))
+                return false;
+
+            bool waiting = BootIntroIsWaitingForInput(boot);
+            bool listFinished = !CanCallOnNextDisclaimerScreen(boot) && !IsActive(boot.m_LoadingFlow)
+                && !boot.m_HoldLoadingUntilInputGiven && !IsActive(boot.m_MainDisclaimer);
+            if (!waiting && !listFinished)
+                return false;
+
+            if (now - _lastBootAdvanceTime < 0.8f)
+                return true;
+
+            try
+            {
+                if (IsActive(boot.m_MainDisclaimer))
+                {
+                    boot.ShowBootLoading();
+                    _lastBootAdvanceTime = now;
+                    LoggerInstance.Msg("WaitingForMainMenu: dismissed the main boot disclaimer (Panel_Boot.ShowBootLoading).");
+                    return true;
+                }
+
+                if (SecondaryDisclaimerIsActive(boot))
+                {
+                    if (CanCallOnNextDisclaimerScreen(boot))
+                    {
+                        boot.OnNextDisclaimerScreen();
+                        _lastBootAdvanceTime = now;
+                        LoggerInstance.Msg("WaitingForMainMenu: advanced a boot intro screen (Panel_Boot.OnNextDisclaimerScreen).");
+                    }
+                    else
+                    {
+                        // Index is already past the list, so OnNextDisclaimerScreen would throw.
+                        boot.ShowMainDisclaimer();
+                        _lastBootAdvanceTime = now;
+                        LoggerInstance.Msg("WaitingForMainMenu: showed the main boot disclaimer (Panel_Boot.ShowMainDisclaimer).");
+                    }
+                    return true;
+                }
+
+                // Secondary list is finished but the main disclaimer isn't up yet
+                // (OnNextDisclaimerScreen already used up the last index).
+                if (!IsActive(boot.m_LoadingFlow) && !CanCallOnNextDisclaimerScreen(boot)
+                    && !IsActive(boot.m_MainDisclaimer) && !boot.m_HoldLoadingUntilInputGiven)
+                {
+                    boot.ShowMainDisclaimer();
+                    _lastBootAdvanceTime = now;
+                    LoggerInstance.Msg("WaitingForMainMenu: showed the main boot disclaimer (Panel_Boot.ShowMainDisclaimer).");
+                    return true;
+                }
+
+                if (boot.m_HoldLoadingUntilInputGiven)
+                {
+                    boot.m_HoldLoadingUntilInputGiven = false;
+                    if (boot.m_SceneLoaded)
+                        boot.ReadyToActivateScene = true;
+                    _lastBootAdvanceTime = now;
+                    LoggerInstance.Msg("WaitingForMainMenu: released the boot loading key-hold.");
+                    return true;
+                }
+            }
+            catch (Exception ex)
+            {
+                _lastBootAdvanceTime = now;
+                LoggerInstance.Warning($"WaitingForMainMenu: boot intro advance failed ({ex.Message}).");
+                return true;
+            }
+
+            return waiting;
+        }
+
+        private Panel_Boot GetEnabledBootPanel(float now)
+        {
+            Panel_Boot boot;
+            if (TryGetEnabledPanel(out boot) && boot != null)
+            {
+                _cachedBootPanel = boot;
+                return boot;
+            }
+
+            if (_cachedBootPanel != null)
+            {
+                try
+                {
+                    if (_cachedBootPanel && _cachedBootPanel.IsEnabled())
+                        return _cachedBootPanel;
+                }
+                catch
+                {
+                }
+                _cachedBootPanel = null;
+            }
+
+            // InterfaceManager may not list Panel_Boot (EmptyScene holds it). Search rarely.
+            if (now < _nextBootSearchTime)
+                return null;
+            _nextBootSearchTime = now + 1.0f;
+
+            try
+            {
+                if (GameManager.IsEmptySceneActive())
+                {
+                    _cachedBootPanel = UnityEngine.Object.FindObjectOfType<Panel_Boot>();
+                    if (_cachedBootPanel != null && _cachedBootPanel.IsEnabled())
+                        return _cachedBootPanel;
+                    _cachedBootPanel = null;
+                }
+            }
+            catch
+            {
+            }
+
+            return null;
+        }
+
+        private static bool BootIntroIsWaitingForInput(Panel_Boot boot)
+        {
+            try
+            {
+                if (boot.m_HoldLoadingUntilInputGiven)
+                    return true;
+                if (IsActive(boot.m_MainDisclaimer))
+                    return true;
+                return SecondaryDisclaimerIsActive(boot);
+            }
+            catch
+            {
+            }
+
+            return false;
+        }
+
+        private static bool SecondaryDisclaimerIsActive(Panel_Boot boot)
+        {
+            var list = boot.m_DisclaimerScreenList;
+            if (list == null)
+                return false;
+
+            for (int i = 0; i < list.Length; i++)
+            {
+                if (IsActive(list[i]))
+                    return true;
+            }
+
+            return false;
+        }
+
+        private static bool CanCallOnNextDisclaimerScreen(Panel_Boot boot)
+        {
+            var list = boot.m_DisclaimerScreenList;
+            if (list == null)
+                return false;
+            return boot.m_DisclaimerScreenIndex < list.Length;
+        }
+
+        private static bool IsActive(GameObject go)
+        {
+            try
+            {
+                return go != null && go.activeInHierarchy;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
         private void TickWaitingForMainMenu(float now)
         {
             if (!TryGetEnabledPanel(out Panel_MainMenu menu) || menu == null)
             {
-                LogStatus(now, "WaitingForMainMenu: Panel_MainMenu not ready yet.");
+                if (!TryAdvanceBootIntros(now))
+                    LogStatus(now, "WaitingForMainMenu: Panel_MainMenu not ready yet.");
                 return;
             }
 

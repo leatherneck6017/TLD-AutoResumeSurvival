@@ -2,6 +2,12 @@
 
 All notable changes to **Auto Resume Survival** will be documented in this file.
 
+## [1.0.4] - 27-Nov-26
+
+### Fixed
+
+- Auto-resume now advances the boot intro/disclaimer screens when they are waiting for a key, so it no longer sits on "waiting for the MAIN MENU" until the player dismisses them. Secondary screens use `Panel_Boot.OnNextDisclaimerScreen()`; the main disclaimer uses `ShowBootLoading()` (calling `OnNextDisclaimerScreen` again throws once the secondary list is finished). Works with or without the intros (`-skipintro`).
+
 ## [1.0.3] - 27-Nov-26
 
 ### Changed
